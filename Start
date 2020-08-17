@@ -1,0 +1,146 @@
+import sqlite3
+import random
+
+class Card:
+
+    Exit=False
+    conn = sqlite3.connect('card.s3db')
+    cur = conn.cursor()
+
+    def __init__(self):
+        conn = sqlite3.connect('card.s3db')
+        cur = conn.cursor()
+        cur.execute('Create table if not exists card(id INTEGER,number TEXT,pin TEXT,balance INTEGER default 0) ;')
+        self.PIN = ""
+        self.Number = ""
+        self.Menu()
+
+    def Luhn_checksum(self, card):
+        def digits_of(n):
+            return [int(x) for x in str(n)]
+        digits = digits_of(card)
+        odd_digits = digits[-1::-2]
+        even_digits = digits[-2::-2]
+        checksum = 0
+        checksum += sum(odd_digits)
+        for d in even_digits:
+            checksum += sum(digits_of(d * 2))
+        return checksum % 10 == 0
+
+    def Luhn(self):
+        check = [int(i) for i in str(self.Number)]
+        for T in range(0, len(check), 2):
+            check[T] = int(check[T]) * 2
+        for T in range(len(check)):
+            if int(check[T]) >= 10:
+                check[T] -= 9
+        result = sum(check)
+        for check in range(0, 10):
+            if (result + check) % 10 == 0:
+                self.Number += str(check)
+
+    def Menu_start(self):
+        print("1. Create an account")
+        print("2. Log into account")
+        print("0. Exit")
+        return input()
+
+    def Menu_inner(self):
+        while True:
+            print("1. Balance")
+            print("2. Add income")
+            print("3. Do transfer")
+            print("4. Close account")
+            print("5. Log out")
+            print("0. Exit")
+            choice=input()
+            memory = self.cur.fetchall()
+            if choice == "1":
+                for x in memory:
+                    if self.Number == x[1]:
+                        print("Balance: ", x[3])
+            elif choice == "2":
+                money=(int(input("Enter income:")))
+                self.cur.execute("update card set balance = balance+ ? where number=?", (money, self.Number))
+                self.conn.commit()
+                print("Income was added!")
+            elif choice == "3":
+                print("Transfer")
+                x = str(input("Enter card number:"))
+                self.cur.execute('select number,balance from card')
+                memory = self.cur.fetchall()
+                check_card = 0
+                for u in memory:
+                    if u[0] == x:
+                        check_card = 1
+
+                if self.Luhn_checksum(x):
+                    if x == self.Number:
+                        print("You can't transfer money to the same account!")
+                    elif check_card == 0:
+                        print("Such a card does not exist.")
+                    else:
+                        y=int(input("Enter how much money you want to transfer:"))
+                        self.cur.execute('select balance from card where number=?', (self.Number,))
+                        if y > self.cur.fetchone()[0]:
+                            print("Not enough money!")
+                        else:
+                            print("Success!")
+                            self.cur.execute('update card set balance = balance - ? where number = ?', (y, self.Number))
+                            self.cur.execute('update card set balance = balance + ? where number = ?', (y, x))
+                            self.conn.commit()
+                else:
+                    print("Probably you made mistake in the card number. Please try again!")
+            elif choice == "4":
+                print("The account has been closed!")
+                self.cur.execute("delete from card where number = ?", (self.Number,))
+                self.conn.commit()
+            elif choice == "5":
+                print("You have successfully logged out!")
+            else:
+                self.Exit=True
+                self.conn.close()
+                break
+
+    def Create(self):
+        self.Number = "400000"
+        print("Your card has been created")
+        print("Your card number:")
+        for x in range(0, 9):
+            self.Number += str(random.randint(0, 9))
+        self.Luhn()
+        print(self.Number)
+        print("Your card PIN:")
+        self.PIN = "682" + str(random.randint(0, 9))
+        print(self.PIN)
+        self.cur.execute("insert into card(id,number,pin,balance) values (?,?,?,?)", (0, str(self.Number), self.PIN, 0))
+        self.conn.commit()
+
+    def Login(self):
+        x = input("Enter your card number:")
+        z = input("Enter your PIN:")
+        self.cur.execute('select number,pin from card')
+        memory = self.cur.fetchall()
+        check = 0
+        for y in memory:
+            if y[0] == x and y[1] == z:
+                check = 1
+                self.Number = x
+                print("You have successfully logged in!")
+                self.Menu_inner()
+                print("Wrong card number or PIN!")
+        if check == 0:
+            print("Wrong card number or PIN!")
+
+    def Menu(self):
+        while not self.Exit:
+            x = self.Menu_start()
+            if x == "1":
+                self.Create()
+            elif x == "2":
+                self.Login()
+            else:
+                break
+
+
+Card()
